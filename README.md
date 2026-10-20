@@ -2,7 +2,7 @@
 
 > A fictional gym-wear store built to practise and demonstrate GA4 e-commerce tracking implemented through Google Tag Manager and a custom dataLayer.
 
-**Live demo:** https://dayo757.github.io/ga4-ecommerce-tracking/
+**Live demo:** [https://dayo757.github.io/ga4-ecommerce-tracking/](https://dayo757.github.io/Ga4-E-commerce-tracking-/)
 
 ## Goal
 _One or two lines: what you set out to implement and why._
