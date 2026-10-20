@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout – Forge Athletica</title>
+<link rel="stylesheet" href="style.css">
+
+<!-- =====================================================================
+     STEP 1: Paste your Google Tag Manager <head> snippet here,
+     replacing GTM-XXXXXXX with your own container ID.
+     Keep it AFTER the dataLayer is initialised (see shop.js) or
+     initialise window.dataLayer here first.
+     ===================================================================== -->
+
+</head>
+<body data-page="checkout">
+<!-- STEP 1b: Paste the GTM <noscript> snippet here. -->
+
+<div class="banner">FREE UK DELIVERY OVER £60 · DEMO STORE FOR TRACKING PRACTICE</div>
+<header>
+  <a class="logo" href="index.html">FORGE ATHLETICA</a>
+  <nav><a href="index.html">Shop</a><a href="cart.html">Basket (<span id="cart-count">0</span>)</a></nav>
+</header>
+<main>
+<h1>Checkout</h1>
+<div class="checkout">
+  <div>
+    <form id="shipping-form">
+      <fieldset>
+        <legend>1. Delivery</legend>
+        <label>Email <input type="email" required placeholder="you@example.com"></label>
+        <label>Full name <input type="text" required></label>
+        <label>Postcode <input type="text" required></label>
+        <div class="radio"><input type="radio" name="shipping" value="standard" id="s1" checked><label for="s1" style="margin:0">Standard (3–5 days) · £3.95</label></div>
+        <div class="radio"><input type="radio" name="shipping" value="express" id="s2"><label for="s2" style="margin:0">Express (next day) · £6.95</label></div>
+      </fieldset>
+      <button type="button" id="shipping-next" class="btn">Continue to payment</button>
+    </form>
+    <form id="payment-form">
+      <fieldset id="step-payment" hidden>
+        <legend>2. Payment</legend>
+        <p class="muted small">Demo only. Do not enter real card details.</p>
+        <div class="radio"><input type="radio" name="payment" value="card" id="p1" checked><label for="p1" style="margin:0">Card</label></div>
+        <div class="radio"><input type="radio" name="payment" value="paypal" id="p2"><label for="p2" style="margin:0">PayPal</label></div>
+        <div class="radio"><input type="radio" name="payment" value="klarna" id="p3"><label for="p3" style="margin:0">Klarna</label></div>
+        <label>Discount code (optional) <input type="text" id="coupon" placeholder="e.g. LIFT10"></label>
+        <button type="submit" class="btn">Place order</button>
+      </fieldset>
+    </form>
+  </div>
+  <aside class="aside">
+    <h3 style="margin-top:0">Order summary</h3>
+    <ul id="co-items" class="co-items"></ul>
+    <div class="totals">
+      <p>Subtotal <span id="co-subtotal"></span></p>
+      <p>Shipping <span id="co-shipping"></span></p>
+      <p><strong>Total</strong> <strong id="co-total"></strong></p>
+    </div>
+  </aside>
+</div>
+</main>
+<div id="toast" role="status"></div>
+<footer>Forge Athletica is a fictional brand built for analytics and tracking practice. No real orders are taken.</footer>
+<script src="shop.js"></script>
+</body>
+</html>
