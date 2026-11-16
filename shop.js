@@ -5,7 +5,7 @@
 
    Every place an analytics event should fire is marked:
 
-       // TODO dataLayer: <event_name>
+       // TODO dataLayer: <event_name>   → now filled in, marked "DONE dataLayer"
 
    Product data you can use is in PRODUCTS below. The cart lives in
    localStorage, so it survives page loads on GitHub Pages.
@@ -50,6 +50,68 @@ function swatch(p) {
   return `<div class="swatch" style="background:${p.colour}"><span>${p.category}</span></div>`;
 }
 
+/* ---------- tracking helpers (NEW) ---------- */
+
+// Converts one of our products into the "item" shape GA4 expects.
+// GA4 (and Meta, via the server container) only understand these exact field names.
+function toItem(p, qty = 1, index) {
+  const item = {
+    item_id: p.id,
+    item_name: p.name,
+    item_category: p.category,
+    item_variant: p.variant,
+    price: p.price,
+    quantity: qty,
+  };
+  if (index !== undefined) item.index = index; // position in a list (0 = first)
+  return item;
+}
+
+// Converts a whole cart ([{ id, qty }, ...]) into a list of GA4 items.
+function cartItems(cart) {
+  return cart.map((l) => toItem(getProduct(l.id), l.qty));
+}
+
+// Hashes text with SHA-256 and returns it as a 64-character hex string.
+// crypto.subtle is built into browsers, but only works on HTTPS pages (Netlify is HTTPS).
+async function sha256(text) {
+  const bytes = new TextEncoder().encode(text);
+  const buffer = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Cleans an email (trim spaces, lowercase) then hashes it.
+// Cleaning first matters: "Jo@Mail.com " and "jo@mail.com" must give the SAME hash,
+// otherwise Meta/Google can't match it to their own (also cleaned + hashed) records.
+async function hashEmail(raw) {
+  const email = (raw || "").trim().toLowerCase();
+  if (!email || !email.includes("@")) return null;
+  try { return await sha256(email); } catch { return null; }
+}
+
+// Reads the stored email hash (if the shopper has entered one this session).
+// sessionStorage is wiped when the tab closes, so the hash doesn't linger long-term.
+function getUserData() {
+  try {
+    const hash = sessionStorage.getItem("fa_em_hash");
+    return hash ? { sha256_email_address: hash } : undefined;
+  } catch { return undefined; }
+}
+
+// Sends one ecommerce event to the dataLayer.
+// 1) { ecommerce: null } clears the previous event's items, because GTM MERGES
+//    dataLayer pushes — without this, old items can leak into the next event.
+// 2) event_id is a unique ID per event, which Meta uses to deduplicate
+//    browser Pixel + server (Conversions API) copies of the same event.
+// 3) user_data (hashed email) is attached automatically once we have it.
+function pushEcommerce(event, ecommerce) {
+  dataLayer.push({ ecommerce: null });
+  const payload = { event, event_id: crypto.randomUUID(), ecommerce };
+  const userData = getUserData();
+  if (userData) payload.user_data = userData;
+  dataLayer.push(payload);
+}
+
 /* ---------- cart actions ---------- */
 function addToCart(id, qty = 1) {
   const cart = getCart();
@@ -57,7 +119,14 @@ function addToCart(id, qty = 1) {
   if (line) line.qty += qty; else cart.push({ id, qty });
   saveCart(cart);
 
-  // TODO dataLayer: add_to_cart
+  // DONE dataLayer: add_to_cart
+  // Value uses qty, so adding 3 leggings reports 3 × £48, not £48.
+  const p = getProduct(id);
+  pushEcommerce("add_to_cart", {
+    currency: CURRENCY,
+    value: p.price * qty,
+    items: [toItem(p, qty)],
+  });
 
   showToast(`${getProduct(id).name} added to basket`);
 }
@@ -67,7 +136,14 @@ function removeFromCart(id) {
   const line = cart.find((l) => l.id === id);
   if (!line) return;
 
-  // TODO dataLayer: remove_from_cart
+  // DONE dataLayer: remove_from_cart
+  // Fired BEFORE the line is deleted, so we still know how many were in the basket.
+  const p = getProduct(id);
+  pushEcommerce("remove_from_cart", {
+    currency: CURRENCY,
+    value: p.price * line.qty,
+    items: [toItem(p, line.qty)],
+  });
 
   saveCart(cart.filter((l) => l.id !== id));
   renderCart();
@@ -95,12 +171,26 @@ function renderListing() {
       </div>
     </a>`).join("");
 
-  // TODO dataLayer: view_item_list
+  // DONE dataLayer: view_item_list
+  // Fires once, right after the products appear. index = each product's position.
+  pushEcommerce("view_item_list", {
+    item_list_id: "home",
+    item_list_name: "Home – All products",
+    items: PRODUCTS.map((p, i) => toItem(p, 1, i)),
+  });
 
   grid.addEventListener("click", (e) => {
     const card = e.target.closest(".card");
     if (!card) return;
-    // TODO dataLayer: select_item
+    // DONE dataLayer: select_item
+    // Each card carries data-id and data-index, so we read which product
+    // was clicked and where it sat in the grid.
+    const p = getProduct(card.dataset.id);
+    pushEcommerce("select_item", {
+      item_list_id: "home",
+      item_list_name: "Home – All products",
+      items: [toItem(p, 1, Number(card.dataset.index))],
+    });
   });
 }
 
@@ -126,7 +216,13 @@ function renderProduct() {
       <p class="muted small">Free returns within 30 days.</p>
     </div>`;
 
-  // TODO dataLayer: view_item
+  // DONE dataLayer: view_item
+  // Only reached for real products — the "not found" check above returns early.
+  pushEcommerce("view_item", {
+    currency: CURRENCY,
+    value: p.price,
+    items: [toItem(p)],
+  });
 
   $("#add-btn").addEventListener("click", () => addToCart(p.id, Number($("#qty").value)));
 }
@@ -158,7 +254,17 @@ function renderCart() {
 }
 function initCartPage() {
   renderCart();
-  // TODO dataLayer: view_cart   (fire once on page load, not on every re-render)
+  // DONE dataLayer: view_cart   (fire once on page load, not on every re-render)
+  // Lives here, not in renderCart(), because renderCart() re-runs after every
+  // "Remove" click and would count extra basket views. Skipped if basket is empty.
+  const cart = getCart();
+  if (cart.length) {
+    pushEcommerce("view_cart", {
+      currency: CURRENCY,
+      value: cartTotal(cart),
+      items: cartItems(cart),
+    });
+  }
 }
 
 /* ---------- page: checkout ---------- */
@@ -176,20 +282,50 @@ function initCheckout() {
     return `<li>${p.name} (${p.variant}) × ${l.qty}<span>${money(p.price * l.qty)}</span></li>`; }).join("");
   renderTotals();
 
-  // TODO dataLayer: begin_checkout
+  // DONE dataLayer: begin_checkout
+  pushEcommerce("begin_checkout", {
+    currency: CURRENCY,
+    value: cartTotal(cart),
+    items: cartItems(cart),
+  });
 
   document.querySelectorAll("input[name=shipping]").forEach((r) => r.addEventListener("change", renderTotals));
 
-  $("#shipping-next").addEventListener("click", () => {
+  // "async" lets us wait for the email hash to finish before sending the event.
+  $("#shipping-next").addEventListener("click", async () => {
     if (!$("#shipping-form").reportValidity()) return;
-    // TODO dataLayer: add_shipping_info
+
+    // NEW: hashed email. Looks for any email field in the shipping form,
+    // hashes it in the browser, and stores ONLY the hash (never the raw email).
+    const emailInput = $("#shipping-form input[type=email]");
+    if (emailInput) {
+      const hash = await hashEmail(emailInput.value);
+      if (hash) { try { sessionStorage.setItem("fa_em_hash", hash); } catch {} }
+    }
+
+    // DONE dataLayer: add_shipping_info
+    // After reportValidity(), so it only fires when the form is filled in correctly.
+    // pushEcommerce() attaches the hashed email automatically from here on.
+    pushEcommerce("add_shipping_info", {
+      currency: CURRENCY,
+      value: cartTotal(cart),
+      shipping_tier: $("input[name=shipping]:checked").value,
+      items: cartItems(cart),
+    });
+
     $("#step-payment").hidden = false;
     $("#shipping-next").hidden = true;
   });
 
   $("#payment-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    // TODO dataLayer: add_payment_info
+    // DONE dataLayer: add_payment_info
+    pushEcommerce("add_payment_info", {
+      currency: CURRENCY,
+      value: cartTotal(cart),
+      payment_type: $("input[name=payment]:checked").value,
+      items: cartItems(cart),
+    });
 
     const shipKey = $("input[name=shipping]:checked").value;
     const order = {
@@ -223,8 +359,23 @@ function initThankYou() {
     <p>Shipping ${money(order.shipping)} · <strong>Total ${money(order.value)}</strong></p>
     <a class="btn" href="index.html">Continue shopping</a>`;
 
-  // TODO dataLayer: purchase
-  // Challenge: refresh this page — does purchase fire twice? How would you stop it?
+  // DONE dataLayer: purchase
+  // Challenge answer: yes, a refresh WOULD fire purchase twice, because the
+  // order is still in localStorage. Fix: after firing once, mark the saved
+  // order as tracked. On refresh, tracked === true, so we skip the event.
+  // value = subtotal (items only); shipping is sent separately (GA4 guidance).
+  if (!order.tracked) {
+    pushEcommerce("purchase", {
+      transaction_id: order.transaction_id,
+      currency: CURRENCY,
+      value: order.subtotal,
+      shipping: order.shipping,
+      coupon: order.coupon || undefined,
+      items: cartItems(order.items),
+    });
+    order.tracked = true;
+    try { localStorage.setItem("fa_last_order", JSON.stringify(order)); } catch {}
+  }
 }
 
 /* ---------- boot ---------- */
